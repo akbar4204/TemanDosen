@@ -104,61 +104,76 @@ with st.sidebar:
 
 # --- 3. LOGIKA UTAMA ---
 if tombol_analisa:
-    # --- MODUL DATA DUMMY (UNTUK TES SAAT GOOGLE BLOKIR) ---
-        # Kita buat data pura-pura seolah-olah berhasil ditarik dari Google
-        author = {
-            "name": nama_dosen,
-            "affiliation": "Universitas (Data Dummy)",
-            "interests": ["Pariwisata Halal", "Manajemen", "Ekonomi Islam"],
-            "citedby": 150, # Pura-pura sitasinya 150
-            "hindex": 5,    # Pura-pura h-index 5
-            "publications": [
-                {"bib": {"title": "Strategi Pengembangan Pariwisata Halal di Indonesia", "pub_year": "2021"}},
-                {"bib": {"title": "Analisis Perilaku Konsumen Muslim Milenial", "pub_year": "2022"}},
-                {"bib": {"title": "Dampak Sertifikasi Halal terhadap UKM", "pub_year": "2023"}},
-                {"bib": {"title": "Digitalisasi Pemasaran Produk Halal", "pub_year": "2020"}}
-            ]
-        }
-        
-        # author = get_scholar_data_safe(nama_dosen) # <--- Kode asli dimatikan dulu
-        # -------------------------------------------------------
+    # --- MULAI DATA DUMMY (DATA PURA-PURA) ---
+    # Kita set manual datanya agar tidak perlu konek ke Google (Anti Blokir)
+    author = {
+        "name": nama_dosen,
+        "affiliation": "Universitas (Data Dummy)",
+        "interests": ["Pariwisata Halal", "Ekonomi Islam", "Manajemen Pemasaran"],
+        "citedby": 254,
+        "hindex": 8,
+        "publications": [
+            {"bib": {"title": "Analisis Potensi Pariwisata Halal di Indonesia", "pub_year": "2021"}},
+            {"bib": {"title": "Perilaku Konsumen Muslim dalam Memilih Hotel Syariah", "pub_year": "2022"}},
+            {"bib": {"title": "Strategi Branding Produk Halal UMKM", "pub_year": "2023"}},
+            {"bib": {"title": "Dampak Sertifikasi Halal Terhadap Penjualan", "pub_year": "2020"}},
+            {"bib": {"title": "Tantangan Industri Halal Global", "pub_year": "2019"}}
+        ]
+    }
+    # --- SELESAI DATA DUMMY ---
 
-    # 2. Cek apakah Dosen Ditemukan
+    # Cek apakah Data Kosong (Logika ini tetap kita biarkan meski pakai dummy)
     if author is None:
-        st.error("Maaf, data dosen tidak ditemukan atau koneksi Google Scholar sedang sibuk. Silakan coba lagi nanti.")
-        st.stop() # Berhenti paksa
+        st.error("Maaf, data dosen tidak ditemukan.")
+        st.stop()
 
-    # 3. Cek Kelengkapan Input (Gunakan nama_dosen juga!)
+    # Cek Kelengkapan Input
     if not nama_dosen or not rumpun_ilmu:
         st.toast("⚠️ Mohon lengkapi Nama Dosen dan Rumpun Ilmu!", icon="⚠️")
     else:
-        # Jika semua aman, tampilkan hasil
+        # Jika aman, tampilkan Judul
         st.markdown(f'<p class="main-header">🎓 Analisis Karier & Roadmap</p>', unsafe_allow_html=True)
         st.markdown(f"Analisis untuk: **{rumpun_ilmu}** | Status: **{jabatan}**", unsafe_allow_html=True)
 
-        status_box = st.status("🔄 Mengaudit data profil...", expanded=True)
+        status_box = st.status("🤖 Mengaudit data profil...", expanded=True)
 
         try:
-            # --- MASUKKAN KODE AI DI SINI (GANTIKAN 'pass') ---
-            
-            # 1. Setup Kunci Rahasia
+            # --- SETUP AI ---
+            # 1. Ambil API Key
             my_api_key = st.secrets["GEMINI_API_KEY"]
             genai.configure(api_key=my_api_key)
 
-            # 2. Siapkan Prompt
-            prompt = f"Analisis dosen ini: {author} untuk rumpun ilmu {rumpun_ilmu}..."
-            
+            # 2. Siapkan Prompt (Perintah untuk AI)
+            prompt = f"""
+            Bertindaklah sebagai Konsultan Karier Akademik Senior.
+            Saya seorang dosen dengan profil berikut:
+            Nama: {author.get('name')}
+            Afiliasi: {author.get('affiliation')}
+            Minat Riset: {author.get('interests')}
+            Total Sitasi: {author.get('citedby')}
+            H-Index: {author.get('hindex')}
+            Publikasi Terakhir: {author.get('publications')}
+
+            Tugas Anda:
+            1. Analisis apakah performa riset saya sudah baik untuk naik jabatan ke Guru Besar.
+            2. Berikan 3 topik riset spesifik yang sedang tren di bidang '{rumpun_ilmu}' yang bisa menaikkan sitasi saya.
+            3. Buat roadmap/timeline kasar untuk 2 tahun ke depan agar saya bisa mencapai Guru Besar.
+
+            Gunakan bahasa Indonesia yang profesional, memotivasi, dan terstruktur.
+            """
+
             # 3. Panggil Gemini
             model = genai.GenerativeModel('gemini-pro')
             response = model.generate_content(prompt)
-            
+
             # 4. Tampilkan Hasil
             status_box.update(label="Selesai!", state="complete")
-            st.markdown(response.text)
-            # --------------------------------------------------
+            st.markdown("### 📋 Hasil Analisis AI")
+            st.write(response.text)
 
         except Exception as e:
-            st.error(f"Terjadi kesalahan: {e}")
+            status_box.update(label="Error", state="error")
+            st.error(f"Terjadi kesalahan pada AI: {e}")
 
             # Auto-Detect Model
             model_name = 'models/gemini-pro'
@@ -325,6 +340,7 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
 
