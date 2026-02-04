@@ -1,4 +1,5 @@
 streamlit
 scholarly
 google-generativeai
+pysocks
 fake-useragent
