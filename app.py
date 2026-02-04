@@ -3,7 +3,33 @@ from scholarly import scholarly
 import google.generativeai as genai
 import json
 import datetime
+import time
+import random
+from fake_useragent import UserAgent
 
+# === BAGIAN 1: DEFINISI FUNGSI (ROBOTNYA) ===
+# Taruh ini di ATAS, tepat di bawah baris-baris "import ..."
+
+def get_scholar_data_safe(name):
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"Mencoba mengambil data: {name} (Percobaan {attempt+1})")
+            
+            # --- INI YANG BENAR (LOGIKA MENCARI DATA) ---
+            search_query = scholarly.search_author(name)
+            author = next(search_query)
+            return scholarly.fill(author)
+            # --------------------------------------------
+            
+        except StopIteration:
+            return None # Nama tidak ditemukan
+        except Exception as e:
+            time.sleep(random.uniform(1, 3)) 
+            if attempt == max_retries - 1:
+                return None
+    return None
+# ==================================
 # --- 1. KONFIGURASI TAMPILAN & CSS (GABUNGAN) ---
 st.set_page_config(page_title="TemanDosen Ultimate", page_icon="🎓", layout="wide")
 
@@ -51,6 +77,13 @@ with st.sidebar:
 
 # --- 3. LOGIKA UTAMA ---
 if tombol_analisa:
+    # Panggil fungsi yang sudah kita buat di atas
+author = get_scholar_data_safe(nama_dosen)
+
+# Cek apakah hasilnya kosong
+if author is None:
+    st.error("Maaf, data dosen tidak ditemukan atau koneksi Google Scholar sedang sibuk. Silakan coba lagi beberapa saat lagi.")
+    st.stop() # Berhenti di sini agar tidak lanjut error
     if not scholar_id or not rumpun_ilmu:
         st.toast("⚠️ Mohon lengkapi Scholar ID dan Rumpun Ilmu!", icon="⚠️")
     else:
@@ -231,4 +264,5 @@ if tombol_analisa:
 
 # Pastikan 'else' ini sejajar dengan 'if tombol_analisa:' yang ada jauh di atas
 else:
+
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
