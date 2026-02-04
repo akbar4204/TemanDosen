@@ -77,29 +77,45 @@ with st.sidebar:
 
 # --- 3. LOGIKA UTAMA ---
 if tombol_analisa:
-    # Panggil fungsi yang sudah kita buat di atas
-author = get_scholar_data_safe(nama_dosen)
+    # 1. Panggil Robot Pencari (Gunakan nama_dosen)
+    author = get_scholar_data_safe(nama_dosen)
 
-# Cek apakah hasilnya kosong
-if author is None:
-    st.error("Maaf, data dosen tidak ditemukan atau koneksi Google Scholar sedang sibuk. Silakan coba lagi beberapa saat lagi.")
-    st.stop() # Berhenti di sini agar tidak lanjut error
-    if not scholar_id or not rumpun_ilmu:
-        st.toast("⚠️ Mohon lengkapi Scholar ID dan Rumpun Ilmu!", icon="⚠️")
+    # 2. Cek apakah Dosen Ditemukan
+    if author is None:
+        st.error("Maaf, data dosen tidak ditemukan atau koneksi Google Scholar sedang sibuk. Silakan coba lagi nanti.")
+        st.stop() # Berhenti paksa
+
+    # 3. Cek Kelengkapan Input (Gunakan nama_dosen juga!)
+    if not nama_dosen or not rumpun_ilmu:
+        st.toast("⚠️ Mohon lengkapi Nama Dosen dan Rumpun Ilmu!", icon="⚠️")
     else:
+        # Jika semua aman, tampilkan hasil
         st.markdown(f'<p class="main-header">🎓 Analisis Karier & Roadmap</p>', unsafe_allow_html=True)
         st.markdown(f"Analisis untuk: **{rumpun_ilmu}** | Status: **{jabatan}**", unsafe_allow_html=True)
-        
+
         status_box = st.status("🔄 Mengaudit data profil...", expanded=True)
-        
-        try:
-            # --- SETUP AI ---
-            try:
-                my_api_key = st.secrets["GEMINI_API_KEY"]
-                genai.configure(api_key=my_api_key)
-            except:
-                status_box.error("API Key error.")
-                st.stop()
+
+      try:
+            # --- MASUKKAN KODE AI DI SINI (GANTIKAN 'pass') ---
+            
+            # 1. Setup Kunci Rahasia
+            my_api_key = st.secrets["GEMINI_API_KEY"]
+            genai.configure(api_key=my_api_key)
+
+            # 2. Siapkan Prompt
+            prompt = f"Analisis dosen ini: {author} untuk rumpun ilmu {rumpun_ilmu}..."
+            
+            # 3. Panggil Gemini
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
+            
+            # 4. Tampilkan Hasil
+            status_box.update(label="Selesai!", state="complete")
+            st.markdown(response.text)
+            # --------------------------------------------------
+
+        except Exception as e:
+            st.error(f"Terjadi kesalahan: {e}")
 
             # Auto-Detect Model
             model_name = 'models/gemini-pro'
@@ -266,3 +282,4 @@ if author is None:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
