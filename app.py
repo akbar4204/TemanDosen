@@ -95,7 +95,7 @@ if tombol_analisa:
 
         status_box = st.status("🔄 Mengaudit data profil...", expanded=True)
 
-      try:
+        try:
             # --- MASUKKAN KODE AI DI SINI (GANTIKAN 'pass') ---
             
             # 1. Setup Kunci Rahasia
@@ -282,4 +282,5 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
