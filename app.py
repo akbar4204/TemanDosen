@@ -1,5 +1,19 @@
 import streamlit as st
-from scholarly import scholarly
+from scholarly import scholarly, ProxyGenerator # Pastikan ProxyGenerator di-import
+
+# --- KONFIGURASI PROXY (AGAR TIDAK DIBLOKIR GOOGLE) ---
+if 'proxy_setup' not in st.session_state:
+    try:
+        pg = ProxyGenerator()
+        success = pg.FreeProxies() # Menggunakan Proxy Gratis
+        if success:
+            scholarly.use_proxy(pg)
+            st.session_state['proxy_setup'] = True
+            print("✅ Proxy berhasil dipasang!")
+        else:
+            print("⚠️ Gagal memasang proxy, mencoba koneksi langsung.")
+    except Exception as e:
+        print(f"⚠️ Error Proxy: {e}")
 import google.generativeai as genai
 import json
 import datetime
@@ -295,6 +309,7 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
 
