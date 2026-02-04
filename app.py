@@ -66,7 +66,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("### 🛠️ Data Dosen")
     
-    scholar_id = st.text_input("Google Scholar ID", placeholder="ID Anda")
+    nama_dosen = st.text_input("Masukkan Nama / ID Google Scholar")
     rumpun_ilmu = st.text_input("Rumpun Ilmu / Prodi", placeholder="Cth: Manajemen, Teknik Sipil")
     jabatan = st.selectbox("Jabatan Saat Ini:", ["CPNS/Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
     pendidikan = st.selectbox("Pendidikan Terakhir:", ["S2 (Magister)", "Sedang S3", "S3 (Doktor)"])
@@ -282,5 +282,6 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
