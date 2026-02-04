@@ -7,27 +7,40 @@ import time
 import random
 from fake_useragent import UserAgent
 
-# === BAGIAN 1: DEFINISI FUNGSI (ROBOTNYA) ===
-# Taruh ini di ATAS, tepat di bawah baris-baris "import ..."
-
-def get_scholar_data_safe(name):
+# --- FUNGSI PENCARIAN BARU (LEBIH PINTAR) ---
+def get_scholar_data_safe(input_text):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            print(f"Mencoba mengambil data: {name} (Percobaan {attempt+1})")
+            # Bersihkan input
+            input_text = input_text.strip()
             
-            # --- INI YANG BENAR (LOGIKA MENCARI DATA) ---
-            search_query = scholarly.search_author(name)
-            author = next(search_query)
+            # DETEKSI: Apakah ini ID atau NAMA?
+            # Jika tidak ada spasi dan panjangnya unik, anggap ID
+            if " " not in input_text and len(input_text) < 20:
+                print(f"🕵️ Mencoba mencari via ID: {input_text} (Percobaan {attempt+1})")
+                author = scholarly.search_author_id(input_text)
+            else:
+                # Jika ada spasi, anggap NAMA
+                print(f"🕵️ Mencoba mencari via Nama: {input_text} (Percobaan {attempt+1})")
+                search_query = scholarly.search_author(input_text)
+                author = next(search_query) # Ambil orang pertama yang muncul
+
+            # Wajib: Ambil data lengkap (publikasi, dll)
             return scholarly.fill(author)
-            # --------------------------------------------
-            
+
         except StopIteration:
-            return None # Nama tidak ditemukan
+            # Error ini muncul jika Nama tidak ada di database Google
+            st.warning(f"❌ Nama '{input_text}' tidak ditemukan di Google Scholar.")
+            return None
         except Exception as e:
-            time.sleep(random.uniform(1, 3)) 
+            # Tampilkan error asli di layar agar kita tahu penyebabnya
+            print(f"Error: {e}")
             if attempt == max_retries - 1:
+                st.error(f"⚠️ Gagal mengambil data. Google mungkin memblokir koneksi. Detail Error: {e}")
                 return None
+            time.sleep(random.uniform(2, 5)) # Istirahat dulu sebelum coba lagi
+            
     return None
 # ==================================
 # --- 1. KONFIGURASI TAMPILAN & CSS (GABUNGAN) ---
@@ -282,6 +295,7 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
 
