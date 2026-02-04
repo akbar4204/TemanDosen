@@ -1,5 +1,5 @@
 streamlit
 scholarly
-google-generativeai
+google-generativeai>=0.7.0
 pysocks
 fake-useragent
