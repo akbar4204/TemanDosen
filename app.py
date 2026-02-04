@@ -122,7 +122,7 @@ if tombol_analisa:
     }
     # --- SELESAI DATA DUMMY ---
 
-    # Cek apakah Data Kosong (Logika ini tetap kita biarkan meski pakai dummy)
+    # Cek apakah Data Kosong
     if author is None:
         st.error("Maaf, data dosen tidak ditemukan.")
         st.stop()
@@ -162,8 +162,9 @@ if tombol_analisa:
             Gunakan bahasa Indonesia yang profesional, memotivasi, dan terstruktur.
             """
 
-            # 3. Panggil Gemini
-            model = genai.GenerativeModel('gemini-pro')
+            # 3. Panggil Gemini (GANTI KE MODEL TERBARU: gemini-1.5-flash)
+            status_box.write("Mnghubungi AI Cerdas...")
+            model = genai.GenerativeModel('gemini-1.5-flash') 
             response = model.generate_content(prompt)
 
             # 4. Tampilkan Hasil
@@ -340,6 +341,7 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
 
