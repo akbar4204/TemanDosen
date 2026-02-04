@@ -104,8 +104,24 @@ with st.sidebar:
 
 # --- 3. LOGIKA UTAMA ---
 if tombol_analisa:
-    # 1. Panggil Robot Pencari (Gunakan nama_dosen)
-    author = get_scholar_data_safe(nama_dosen)
+    # --- MODUL DATA DUMMY (UNTUK TES SAAT GOOGLE BLOKIR) ---
+        # Kita buat data pura-pura seolah-olah berhasil ditarik dari Google
+        author = {
+            "name": nama_dosen,
+            "affiliation": "Universitas (Data Dummy)",
+            "interests": ["Pariwisata Halal", "Manajemen", "Ekonomi Islam"],
+            "citedby": 150, # Pura-pura sitasinya 150
+            "hindex": 5,    # Pura-pura h-index 5
+            "publications": [
+                {"bib": {"title": "Strategi Pengembangan Pariwisata Halal di Indonesia", "pub_year": "2021"}},
+                {"bib": {"title": "Analisis Perilaku Konsumen Muslim Milenial", "pub_year": "2022"}},
+                {"bib": {"title": "Dampak Sertifikasi Halal terhadap UKM", "pub_year": "2023"}},
+                {"bib": {"title": "Digitalisasi Pemasaran Produk Halal", "pub_year": "2020"}}
+            ]
+        }
+        
+        # author = get_scholar_data_safe(nama_dosen) # <--- Kode asli dimatikan dulu
+        # -------------------------------------------------------
 
     # 2. Cek apakah Dosen Ditemukan
     if author is None:
@@ -309,6 +325,7 @@ if tombol_analisa:
 else:
 
     st.info("👈 Silakan isi data di Sidebar untuk memulai Audit Karier Anda.")
+
 
 
 
