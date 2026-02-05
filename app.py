@@ -164,7 +164,7 @@ if tombol_analisa:
 
             # 3. Panggil Gemini (GANTI KE MODEL TERBARU: gemini-1.5-flash)
             status_box.write("Mnghubungi AI Cerdas...")
-            model = genai.GenerativeModel('gemini-1.5-flash') 
+            model = genai.GenerativeModel('gemini-pro') 
             response = model.generate_content(prompt)
 
             # 4. Tampilkan Hasil
@@ -175,6 +175,7 @@ if tombol_analisa:
         except Exception as e:
             status_box.update(label="Error", state="error")
             st.error(f"Terjadi kesalahan pada AI: {e}")
+
 
 
 
