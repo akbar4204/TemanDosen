@@ -5,117 +5,112 @@ from scholarly import scholarly
 # --- CONFIG HALAMAN ---
 st.set_page_config(page_title="TemanDosen Pro", page_icon="🎓", layout="wide")
 
-# --- JUDUL & DEBUGGER VERSI (PENTING) ---
 st.markdown("## 🎓 TemanDosen: Asisten Karier Akademik")
-# Baris ini akan memberitahu kita versi berapa yang dipakai server
-st.caption(f"System Info: Library AI Version **{genai.__version__}** (Target: >= 0.8.3)") 
 st.markdown("---")
 
-# --- FUNGSI PEMBERSIH ID ---
-def bersihkan_id(input_text):
-    if "user=" in input_text:
-        try:
-            return input_text.split("user=")[1].split("&")[0]
-        except:
-            return input_text
-    if "&" in input_text:
-        return input_text.split("&")[0]
-    return input_text
+# --- 1. SETUP API KEY & DETEKSI MODEL (RADAR) ---
+# Kita cek dulu model apa yang DIIZINKAN untuk API Key ini
+if "GEMINI_API_KEY" in st.secrets:
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        # Minta daftar model yang tersedia
+        model_list = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # Bersihkan nama (misal: models/gemini-pro -> gemini-pro)
+                clean_name = m.name.replace("models/", "")
+                model_list.append(clean_name)
+        
+        # Urutkan agar Flash/Pro ada di atas
+        model_list.sort(reverse=True) 
+        
+    except Exception as e:
+        st.error(f"❌ API Key Bermasalah: {e}")
+        model_list = []
+else:
+    st.error("⚠️ API Key belum disetting di Secrets!")
+    model_list = []
 
-# --- KOLOM INPUT ---
+# --- 2. KOLOM INPUT ---
 col_kiri, col_kanan = st.columns(2)
 
 with col_kiri:
-    st.subheader("1. Identitas Digital")
+    st.subheader("1. Identitas & Model")
+    
+    # --- PILIHAN MODEL (ANTI ERROR 404) ---
+    if model_list:
+        pilihan_model = st.selectbox(
+            "✅ Model Tersedia (Pilih Satu):", 
+            model_list,
+            index=0
+        )
+        st.caption(f"ℹ️ Menggunakan model: `{pilihan_model}`")
+    else:
+        st.warning("⚠️ Tidak ada model yang ditemukan. Cek API Key Anda.")
+        pilihan_model = None
+
     raw_id = st.text_input("Paste Link / ID Google Scholar", placeholder="Contoh: 3lUcciYAAAAJ")
-    scholar_id = bersihkan_id(raw_id)
     
-    if raw_id and raw_id != scholar_id:
-        st.info(f"✅ ID Bersih: {scholar_id}")
-    
+    # Pembersih ID
+    scholar_id = raw_id
+    if "user=" in raw_id:
+        try: scholar_id = raw_id.split("user=")[1].split("&")[0]
+        except: pass
+        
     rumpun = st.text_input("Rumpun Ilmu / Prodi", placeholder="Contoh: Pariwisata Halal")
 
 with col_kanan:
     st.subheader("2. Status Kepegawaian")
-    jabatan = st.selectbox("Jabatan Fungsional", 
-                           ["Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
-    
-    pendidikan = st.selectbox("Pendidikan Terakhir", 
-                              ["S2 (Magister)", "S3 (Doktor)"])
+    jabatan = st.selectbox("Jabatan Fungsional", ["Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
+    pendidikan = st.selectbox("Pendidikan Terakhir", ["S2 (Magister)", "S3 (Doktor)"])
 
 st.markdown("---")
 tombol = st.button("🚀 Analisa Karier & Roadmap", type="primary", use_container_width=True)
 
-# --- LOGIKA UTAMA ---
+# --- 3. LOGIKA UTAMA ---
 if tombol:
-    if not scholar_id:
-        st.warning("⚠️ Mohon isi ID Google Scholar dulu.")
+    if not scholar_id or not pilihan_model:
+        st.warning("⚠️ Pastikan ID Scholar diisi dan Model tersedia.")
         st.stop()
         
-    container = st.container(border=True)
-    status = container.status("🔍 Sedang memproses...", expanded=True)
+    status = st.status("🔍 Memproses...", expanded=True)
     
     try:
-        # 1. SETUP API KEY
-        if "GEMINI_API_KEY" not in st.secrets:
-            st.error("API Key belum disetting!")
-            st.stop()
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
-        # 2. AMBIL DATA SCHOLAR
-        status.write("📂 Mengakses Google Scholar...")
+        # A. AMBIL DATA SCHOLAR
+        status.write("📂 Mengambil data Scholar...")
         author = scholarly.search_author_id(scholar_id)
         author = scholarly.fill(author)
         
         nama = author.get('name')
         h_index = author.get('hindex')
-        total_sitasi = author.get('citedby')
-        pubs_raw = author.get('publications', [])
-        publikasi_list = [pub['bib']['title'] for pub in pubs_raw[:5]] if pubs_raw else ["Belum ada publikasi"]
+        pubs = [p['bib']['title'] for p in author.get('publications', [])[:5]]
         
-        status.write(f"✅ Data Ditemukan: {nama} | H-Index: {h_index}")
+        status.write(f"✅ Data: {nama} | H-Index: {h_index}")
         
-        # 3. ANALISIS AI
-        status.write("🤖 Mengirim ke Gemini 1.5 Flash...")
+        # B. ANALISIS AI (SESUAI PILIHAN)
+        status.write(f"🤖 Mengirim ke AI ({pilihan_model})...")
         
-        # Model Configuration
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(pilihan_model) # Gunakan model yang dipilih user
         
         prompt = f"""
-        Bertindaklah sebagai Asesor PAK (Penilaian Angka Kredit) Indonesia.
+        Role: Asesor PAK Dosen Indonesia.
+        Data: {nama}, {jabatan}, {pendidikan}, {rumpun}, H-Index {h_index}.
+        Publikasi Terakhir: {pubs}
         
-        DATA DOSEN:
-        - Nama: {nama}
-        - Jabatan: {jabatan}
-        - Pendidikan: {pendidikan}
-        - Rumpun Ilmu: {rumpun}
-        - H-Index: {h_index}
-        - Total Sitasi: {total_sitasi}
-        - 5 Publikasi Terakhir: {publikasi_list}
-        
-        BERIKAN:
-        1. Analisis Gap untuk kenaikan jabatan.
-        2. 3 Ide Riset '{rumpun}' yang Viral/High Impact 2025.
-        3. Roadmap karier 1 tahun ke depan.
+        Buat:
+        1. Analisis Gap Karier.
+        2. 3 Ide Riset Viral 2025.
+        3. Roadmap 1 Tahun.
         """
         
         response = model.generate_content(prompt)
         
         status.update(label="Selesai!", state="complete", expanded=False)
-        st.success(f"Analisis Selesai untuk **{nama}**")
+        st.subheader(f"Hasil Analisis: {nama}")
         st.markdown(response.text)
 
     except Exception as e:
-        status.update(label="Error", state="error")
+        status.update(label="Gagal", state="error")
         st.error(f"Terjadi kesalahan: {e}")
-        
-        # PESAN DIAGNOSA KHUSUS
-        if "404" in str(e):
-             st.warning(f"""
-             **DIAGNOSA:** Versi Library Anda saat ini: `{genai.__version__}`.
-             Untuk menggunakan Gemini Flash, versi MINIMAL harus `0.7.0` atau `0.8.3`.
-             
-             **SOLUSI:**
-             1. Pastikan `requirements.txt` sudah diupdate.
-             2. Lakukan 'Reboot App' untuk memaksa update.
-             """)
+        st.info("💡 Tips: Coba ganti pilihan model di dropdown (misal ke gemini-1.5-flash-001 atau gemini-pro).")
