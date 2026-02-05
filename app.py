@@ -5,13 +5,12 @@ import google.generativeai as genai
 # --- CONFIG HALAMAN ---
 st.set_page_config(page_title="TemanDosen Pro", page_icon="🎓", layout="wide")
 
-# Header
 st.markdown("## 🎓 TemanDosen: Asisten Karier Akademik")
+st.caption("System Check: ✅ Scholar ID Support | ✅ Auto-Model Switching")
 st.markdown("---")
 
 # --- FUNGSI PEMBERSIH ID ---
 def bersihkan_id(input_text):
-    # Membersihkan link panjang menjadi ID saja
     if "user=" in input_text:
         try:
             return input_text.split("user=")[1].split("&")[0]
@@ -20,6 +19,34 @@ def bersihkan_id(input_text):
     if "&" in input_text:
         return input_text.split("&")[0]
     return input_text
+
+# --- FUNGSI PENCARI MODEL OTOMATIS (SOLUSI ERROR 404) ---
+def get_working_model():
+    # Daftar prioritas model yang ingin dicoba
+    priority_models = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro',
+        'gemini-pro'
+    ]
+    
+    # Cek model apa yang tersedia di akun ini
+    available_models = []
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+    except:
+        pass # Lanjut saja kalau gagal list
+
+    # Cari kecocokan
+    for target in priority_models:
+        # Cek format 'models/nama' atau 'nama' saja
+        if any(target in m for m in available_models):
+            return target
+            
+    # Jika tidak ada yang cocok, kembalikan default aman
+    return 'gemini-pro'
 
 # --- KOLOM INPUT LENGKAP ---
 col_kiri, col_kanan = st.columns(2)
@@ -30,13 +57,12 @@ with col_kiri:
     scholar_id = bersihkan_id(raw_id)
     
     if raw_id and raw_id != scholar_id:
-        st.success(f"✅ ID Terdeteksi: {scholar_id}")
+        st.info(f"✅ ID Bersih: {scholar_id}")
     
     rumpun = st.text_input("Rumpun Ilmu / Prodi", placeholder="Contoh: Pariwisata Halal")
 
 with col_kanan:
     st.subheader("2. Status Kepegawaian")
-    # INI YANG ANDA MINTA (JABATAN & PENDIDIKAN)
     jabatan = st.selectbox("Jabatan Fungsional Saat Ini", 
                            ["Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
     
@@ -52,58 +78,62 @@ if tombol:
         st.warning("⚠️ Mohon isi ID Google Scholar dulu.")
         st.stop()
         
-    # Container Output
     container = st.container(border=True)
-    status = container.status("🔍 Sedang memproses data...", expanded=True)
+    status = container.status("🔍 Sedang memproses...", expanded=True)
     
     try:
-        # 1. AMBIL DATA SCHOLAR
-        status.write("📂 Mengakses database Google Scholar...")
+        # 1. SETUP API KEY
+        if "GEMINI_API_KEY" not in st.secrets:
+            st.error("API Key belum disetting!")
+            st.stop()
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+        # 2. AMBIL DATA SCHOLAR
+        status.write("📂 Mengakses Google Scholar...")
+        try:
+            author = scholarly.search_author_id(scholar_id)
+            author = scholarly.fill(author)
+        except Exception as e:
+            st.error(f"Gagal mengambil data Scholar. Pastikan ID benar. Error: {e}")
+            st.stop()
         
-        author = scholarly.search_author_id(scholar_id)
-        author = scholarly.fill(author) # Tarik data lengkap
-        
-        # Ekstrak Data
         nama = author.get('name')
         afiliasi = author.get('affiliation')
         h_index = author.get('hindex')
         total_sitasi = author.get('citedby')
-        
-        # Ambil 5 judul publikasi terbaru
-        publikasi_list = [pub['bib']['title'] for pub in author.get('publications')[:5]]
+        # Ambil publikasi (handle jika kosong)
+        pubs_raw = author.get('publications', [])
+        publikasi_list = [pub['bib']['title'] for pub in pubs_raw[:5]] if pubs_raw else ["Belum ada publikasi terdeteksi"]
         
         status.write(f"✅ Data Ditemukan: {nama} | H-Index: {h_index}")
         
-        # 2. ANALISIS AI
-        status.write("🤖 Mengirim data ke AI Consultant...")
+        # 3. ANALISIS AI (DENGAN AUTO-SWITCH)
+        status.write("🤖 Mencari model AI terbaik...")
         
-        if "GEMINI_API_KEY" not in st.secrets:
-            st.error("API Key belum disetting!")
-            st.stop()
-            
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Cari model yang valid
+        model_name = get_working_model()
+        status.write(f"⚙️ Menggunakan Model: {model_name}")
         
-        # KITA GUNAKAN MODEL TERBARU (Pastikan requirements.txt sudah diupdate)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
-        Bertindaklah sebagai Asesor PAK (Penilaian Angka Kredit) Indonesia.
+        Bertindaklah sebagai Asesor PAK (Penilaian Angka Kredit) Indonesia & Konsultan Karier.
         
         DATA DOSEN:
         - Nama: {nama}
-        - Jabatan Saat Ini: {jabatan}
-        - Pendidikan Terakhir: {pendidikan}
+        - Jabatan: {jabatan}
+        - Pendidikan: {pendidikan}
         - Rumpun Ilmu: {rumpun}
-        - H-Index Scholar: {h_index}
+        - H-Index: {h_index}
         - Total Sitasi: {total_sitasi}
         - 5 Publikasi Terakhir: {publikasi_list}
         
-        TUGAS ANDA:
-        1. **Analisis Posisi**: Apakah dengan H-Index {h_index} dan jabatan {jabatan}, dosen ini sudah layak naik ke jenjang berikutnya? Apa kekurangannya?
-        2. **Rekomendasi Riset**: Berikan 3 ide judul penelitian tentang '{rumpun}' yang berpeluang besar disitasi tinggi tahun 2025.
-        3. **Roadmap Karier**: Buatlah checklist target konkret untuk 1 tahun ke depan agar bisa naik jabatan / lulus serdos.
+        TUGAS:
+        1. **Analisis Gap**: Apa kekurangan utama profil ini untuk naik ke jenjang selanjutnya (atau untuk Guru Besar jika sudah LK)?
+        2. **Ide Riset Viral 2025**: Berikan 3 judul paper spesifik untuk bidang '{rumpun}' yang berpotensi Q1/High Impact.
+        3. **Strategi Percepatan**: Roadmap konkret 12 bulan ke depan.
         
-        Gunakan gaya bahasa profesional, memotivasi, dan format poin-poin yang rapi.
+        Gunakan bahasa Indonesia profesional, format Markdown rapi.
         """
         
         response = model.generate_content(prompt)
@@ -111,10 +141,16 @@ if tombol:
         status.update(label="Selesai!", state="complete", expanded=False)
         
         # TAMPILKAN HASIL
-        st.success(f"Analisis untuk **{nama}** ({jabatan})")
+        st.success(f"Analisis Selesai untuk **{nama}**")
         st.markdown(response.text)
 
     except Exception as e:
-        status.update(label="Terjadi Kesalahan", state="error")
-        st.error(f"Error Detail: {e}")
-        st.info("Tips: Jika error '404 model not found', pastikan Anda sudah melakukan 'Reboot App' setelah update requirements.txt.")
+        status.update(label="Error", state="error")
+        st.error(f"Terjadi kesalahan sistem: {e}")
+        st.markdown("---")
+        st.warning("""
+        **Solusi:**
+        1. Coba refresh halaman.
+        2. Jika masih error, kemungkinan API Key bermasalah atau kuota habis.
+        3. Coba lakukan 'Reboot App' di menu kanan atas.
+        """)
