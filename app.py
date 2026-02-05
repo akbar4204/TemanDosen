@@ -1,188 +1,146 @@
 import streamlit as st
-from scholarly import scholarly, ProxyGenerator # Pastikan ProxyGenerator di-import
-
-# --- KONFIGURASI PROXY (AGAR TIDAK DIBLOKIR GOOGLE) ---
-if 'proxy_setup' not in st.session_state:
-    try:
-        pg = ProxyGenerator()
-        success = pg.FreeProxies() # Menggunakan Proxy Gratis
-        if success:
-            scholarly.use_proxy(pg)
-            st.session_state['proxy_setup'] = True
-            print("✅ Proxy berhasil dipasang!")
-        else:
-            print("⚠️ Gagal memasang proxy, mencoba koneksi langsung.")
-    except Exception as e:
-        print(f"⚠️ Error Proxy: {e}")
+from scholarly import scholarly, ProxyGenerator
 import google.generativeai as genai
-import json
 import datetime
 import time
-import random
-from fake_useragent import UserAgent
 
-# --- FUNGSI PENCARIAN BARU (LEBIH PINTAR) ---
-def get_scholar_data_safe(input_text):
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # Bersihkan input
-            input_text = input_text.strip()
-            
-            # DETEKSI: Apakah ini ID atau NAMA?
-            # Jika tidak ada spasi dan panjangnya unik, anggap ID
-            if " " not in input_text and len(input_text) < 20:
-                print(f"🕵️ Mencoba mencari via ID: {input_text} (Percobaan {attempt+1})")
-                author = scholarly.search_author_id(input_text)
-            else:
-                # Jika ada spasi, anggap NAMA
-                print(f"🕵️ Mencoba mencari via Nama: {input_text} (Percobaan {attempt+1})")
-                search_query = scholarly.search_author(input_text)
-                author = next(search_query) # Ambil orang pertama yang muncul
+# --- SETUP HALAMAN ---
+st.set_page_config(page_title="TemanDosen - Analisis Karier", page_icon="🎓", layout="wide")
 
-            # Wajib: Ambil data lengkap (publikasi, dll)
-            return scholarly.fill(author)
-
-        except StopIteration:
-            # Error ini muncul jika Nama tidak ada di database Google
-            st.warning(f"❌ Nama '{input_text}' tidak ditemukan di Google Scholar.")
-            return None
-        except Exception as e:
-            # Tampilkan error asli di layar agar kita tahu penyebabnya
-            print(f"Error: {e}")
-            if attempt == max_retries - 1:
-                st.error(f"⚠️ Gagal mengambil data. Google mungkin memblokir koneksi. Detail Error: {e}")
-                return None
-            time.sleep(random.uniform(2, 5)) # Istirahat dulu sebelum coba lagi
-            
-    return None
-# ==================================
-# --- 1. KONFIGURASI TAMPILAN & CSS (GABUNGAN) ---
-st.set_page_config(page_title="TemanDosen Ultimate", page_icon="🎓", layout="wide")
-
+# CSS Agar Tampilan Rapi
 st.markdown("""
 <style>
-    .main-header {font-size: 2.2rem; color: #2C3E50; font-weight: 700; margin-bottom: 0px;}
-    .sub-header {font-size: 1.1rem; color: #7f8c8d; margin-bottom: 20px;}
-    
-    /* Style untuk Gap Analysis (Barometer) */
-    .metric-card {background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 15px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);}
-    
-    /* Style untuk Timeline (V3 Lama) */
-    .card-timeline {
-        background-color: #f8f9fa; 
-        padding: 15px; 
-        border-radius: 8px; 
-        border-left: 5px solid #2C3E50; 
-        margin-bottom: 10px; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .card-date {font-weight: bold; color: #2980b9; font-size: 1.1rem;}
-    
-    /* Warning Box */
-    .gap-alert {padding: 15px; border-radius: 8px; background-color: #fff3cd; border-left: 5px solid #ffc107; color: #856404;}
+    .main-header {font-size: 2.5rem; font-weight: bold; color: #1E3A8A; margin-bottom: 0;}
+    .sub-header {font-size: 1.1rem; color: #64748B; margin-bottom: 2rem;}
+    .card {background-color: #F8FAFC; padding: 1.5rem; border-radius: 10px; border: 1px solid #E2E8F0; margin-bottom: 1rem;}
+    .success-box {background-color: #D1FAE5; color: #065F46; padding: 1rem; border-radius: 8px;}
+    .stButton>button {width: 100%; background-color: #2563EB; color: white; font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SIDEBAR ---
+# --- SIDEBAR ---
 with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/3429/3429149.png", width=80)
+    st.title("TemanDosen")
+    st.write("Partner Strategis Menuju Guru Besar")
+    st.divider()
+    
+    st.header("🛠️ Data Input")
+    
+    # INPUT UTAMA: SCHOLAR ID
+    scholar_id_input = st.text_input("Masukkan ID Google Scholar", placeholder="Contoh: 3lUcciYAAAAJ")
+    st.caption("ℹ️ ID ada di URL profil Anda. Contoh: scholar.google.com/citations?user=**3lUcciYAAAAJ**")
+    
+    rumpun_ilmu = st.text_input("Rumpun Ilmu / Prodi", placeholder="Contoh: Pariwisata Halal")
+    
+    jabatan = st.selectbox("Jabatan Saat Ini", 
+                           ["CPNS/Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
+    
+    pendidikan = st.selectbox("Pendidikan Terakhir", ["S2 (Magister)", "S3 (Doktor)"])
+    
+    tombol_analisa = st.button("🚀 Analisa Karier")
+    
+    st.divider()
+    st.info("Versi: 5.1 (Scholar ID Only)")
+
+# --- FUNGSI AI AUTO-DETECT (ANTI ERROR 404) ---
+def get_gemini_response(prompt):
     try:
-        st.image("logo.png", use_container_width=True)
+        # Coba model terbaru dulu
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        return model.generate_content(prompt)
     except:
-        st.title("TemanDosen")
-    st.markdown("---")
-    st.write("### 🛠️ Data Dosen")
-    
-    nama_dosen = st.text_input("Masukkan Nama / ID Google Scholar")
-    rumpun_ilmu = st.text_input("Rumpun Ilmu / Prodi", placeholder="Cth: Manajemen, Teknik Sipil")
-    jabatan = st.selectbox("Jabatan Saat Ini:", ["CPNS/Tenaga Pengajar", "Asisten Ahli", "Lektor", "Lektor Kepala", "Guru Besar"])
-    pendidikan = st.selectbox("Pendidikan Terakhir:", ["S2 (Magister)", "Sedang S3", "S3 (Doktor)"])
-    
-    tombol_analisa = st.button("🚀 Analisa Komprehensif", type="primary")
-    st.markdown("---")
-    st.caption("v5.0 - Ultimate Integrated")
+        try:
+            # Jika gagal, coba model standar
+            model = genai.GenerativeModel('gemini-pro')
+            return model.generate_content(prompt)
+        except Exception as e:
+            return f"Error Koneksi AI: {e}"
 
-# --- 3. LOGIKA UTAMA ---
+# --- LOGIKA UTAMA ---
 if tombol_analisa:
-    # --- MULAI DATA DUMMY (DATA PURA-PURA) ---
-    # Kita set manual datanya agar tidak perlu konek ke Google (Anti Blokir)
-    author = {
-        "name": nama_dosen,
-        "affiliation": "Universitas (Data Dummy)",
-        "interests": ["Pariwisata Halal", "Ekonomi Islam", "Manajemen Pemasaran"],
-        "citedby": 254,
-        "hindex": 8,
-        "publications": [
-            {"bib": {"title": "Analisis Potensi Pariwisata Halal di Indonesia", "pub_year": "2021"}},
-            {"bib": {"title": "Perilaku Konsumen Muslim dalam Memilih Hotel Syariah", "pub_year": "2022"}},
-            {"bib": {"title": "Strategi Branding Produk Halal UMKM", "pub_year": "2023"}},
-            {"bib": {"title": "Dampak Sertifikasi Halal Terhadap Penjualan", "pub_year": "2020"}},
-            {"bib": {"title": "Tantangan Industri Halal Global", "pub_year": "2019"}}
-        ]
-    }
-    # --- SELESAI DATA DUMMY ---
-
-    # Cek apakah Data Kosong
-    if author is None:
-        st.error("Maaf, data dosen tidak ditemukan.")
+    if not scholar_id_input:
+        st.warning("⚠️ Mohon masukkan ID Google Scholar dulu!")
+        st.stop()
+    
+    if " " in scholar_id_input:
+        st.error("❌ ID Google Scholar tidak boleh mengandung spasi! Pastikan Anda hanya memasukkan kode unik (contoh: 3lUcciYAAAAJ).")
         st.stop()
 
-    # Cek Kelengkapan Input
-    if not nama_dosen or not rumpun_ilmu:
-        st.toast("⚠️ Mohon lengkapi Nama Dosen dan Rumpun Ilmu!", icon="⚠️")
-    else:
-        # Jika aman, tampilkan Judul
+    col1, col2 = st.columns([1, 2])
+    
+    with col2:
         st.markdown(f'<p class="main-header">🎓 Analisis Karier & Roadmap</p>', unsafe_allow_html=True)
-        st.markdown(f"Analisis untuk: **{rumpun_ilmu}** | Status: **{jabatan}**", unsafe_allow_html=True)
-
-        status_box = st.status("🤖 Mengaudit data profil...", expanded=True)
-
+        st.markdown(f"Analisis untuk ID: **{scholar_id_input}** | Bidang: **{rumpun_ilmu}**", unsafe_allow_html=True)
+        
+        # Container Status
+        status_box = st.status("🔍 Memulai proses audit...", expanded=True)
+        
         try:
-            # --- SETUP AI ---
-            # 1. Ambil API Key
-            my_api_key = st.secrets["GEMINI_API_KEY"]
-            genai.configure(api_key=my_api_key)
+            # 1. SETUP PROXY (Agar tidak diblokir Google)
+            pg = ProxyGenerator()
+            pg.FreeProxies()
+            scholarly.use_proxy(pg)
+            status_box.write("✅ Proxy aman.")
 
-            # 2. Siapkan Prompt (Perintah untuk AI)
+            # 2. TARIK DATA DARI ID
+            status_box.write(f"📥 Mengambil data dari ID: {scholar_id_input}...")
+            
+            # --- INI KUNCI PERUBAHANNYA: SEARCH_AUTHOR_ID ---
+            author = scholarly.search_author_id(scholar_id_input)
+            author = scholarly.fill(author) # Ambil detail lengkap
+            
+            nama_dosen = author.get('name')
+            st.success(f"✅ Data Ditemukan: {nama_dosen} ({author.get('affiliation')})")
+            status_box.write("✅ Data profil & publikasi berhasil ditarik.")
+
+            # 3. SIAPKAN DATA UNTUK AI
+            status_box.write("🤖 Menghubungi AI untuk analisis...")
+            
+            # Setup API Key
+            if "GEMINI_API_KEY" in st.secrets:
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            else:
+                st.error("API Key belum disetting di Streamlit Secrets!")
+                st.stop()
+
+            # Prompt
             prompt = f"""
-            Bertindaklah sebagai Konsultan Karier Akademik Senior.
-            Saya seorang dosen dengan profil berikut:
-            Nama: {author.get('name')}
-            Afiliasi: {author.get('affiliation')}
-            Minat Riset: {author.get('interests')}
-            Total Sitasi: {author.get('citedby')}
-            H-Index: {author.get('hindex')}
-            Publikasi Terakhir: {author.get('publications')}
+            Bertindaklah sebagai Asesor Penilaian Angka Kredit (PAK) Indonesia.
+            
+            DATA DOSEN:
+            - Nama: {nama_dosen}
+            - Jabatan Saat Ini: {jabatan}
+            - Pendidikan: {pendidikan}
+            - Rumpun Ilmu: {rumpun_ilmu}
+            - H-Index Scopus/Scholar: {author.get('hindex')}
+            - Total Sitasi: {author.get('citedby')}
+            - Jumlah Publikasi Terdeteksi: {len(author.get('publications'))}
+            
+            3 JUDUL PUBLIKASI TERBARU:
+            {[pub['bib']['title'] for pub in author.get('publications')[:3]]}
 
-            Tugas Anda:
-            1. Analisis apakah performa riset saya sudah baik untuk naik jabatan ke Guru Besar.
-            2. Berikan 3 topik riset spesifik yang sedang tren di bidang '{rumpun_ilmu}' yang bisa menaikkan sitasi saya.
-            3. Buat roadmap/timeline kasar untuk 2 tahun ke depan agar saya bisa mencapai Guru Besar.
-
-            Gunakan bahasa Indonesia yang profesional, memotivasi, dan terstruktur.
+            TUGAS ANDA:
+            1. BERIKAN STATUS SAAT INI: Apakah H-Index dan sitasi sudah cukup untuk naik jabatan ke tahap selanjutnya? (Jujur dan tegas).
+            2. REKOMENDASI TOPIK RISET: Berikan 3 ide judul penelitian spesifik tentang '{rumpun_ilmu}' yang berpotensi tembus jurnal Q1 tahun depan.
+            3. ROADMAP TAHUNAN: Buat rencana aksi (Action Plan) singkat untuk 12 bulan ke depan agar bisa naik jabatan.
+            
+            Gunakan bahasa Indonesia formal, format poin-poin agar mudah dibaca.
             """
 
-            # 3. Panggil Gemini (GANTI KE MODEL TERBARU: gemini-1.5-flash)
-            status_box.write("Mnghubungi AI Cerdas...")
-            model = genai.GenerativeModel('gemini-pro') 
-            response = model.generate_content(prompt)
-
-            # 4. Tampilkan Hasil
-            status_box.update(label="Selesai!", state="complete")
-            st.markdown("### 📋 Hasil Analisis AI")
-            st.write(response.text)
+            # 4. EKSEKUSI AI (Dengan Auto-Detect)
+            response = get_gemini_response(prompt)
+            
+            status_box.update(label="Analisis Selesai!", state="complete", expanded=False)
+            
+            # TAMPILKAN HASIL
+            st.markdown("---")
+            if isinstance(response, str): # Jika error teks
+                st.error(response)
+            else:
+                st.write(response.text)
 
         except Exception as e:
-            status_box.update(label="Error", state="error")
-            st.error(f"Terjadi kesalahan pada AI: {e}")
-
-
-
-
-
-
-
-
-
-
-
+            status_box.update(label="Terjadi Kesalahan", state="error")
+            st.error(f"Gagal memproses data: {e}")
+            st.warning("Tips: Pastikan ID Scholar benar. Jika error proxy, coba Refresh halaman.")
